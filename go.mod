@@ -13,6 +13,3 @@ require (
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/term v0.46.0 // indirect
 )
-
-// Use the opcua checkout next to this one until v0.1.1 is tagged.
-replace github.com/ka1hung/opcua => ../opcua

@@ -99,7 +99,13 @@ go test ./...
 
 ## 相依
 
-目前 `go.mod` 用 `replace` 指向旁邊的 `../opcua`。opcua 打好新版本號後，改成 `require github.com/ka1hung/opcua <版本>` 並刪掉 `replace`。
+使用 `github.com/ka1hung/opcua`（私有 repo）。編譯前要先設定：
+
+```
+go env -w GOPRIVATE=github.com/ka1hung/*
+```
+
+並讓 git 能存取 GitHub 私有 repo（`gh auth setup-git` 或 SSH key）。開發 opcua 時若要直接用旁邊的 checkout，可暫時加上 `replace github.com/ka1hung/opcua => ../opcua`，提交前記得拿掉。
 
 ## 授權
 
