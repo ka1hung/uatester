@@ -2,7 +2,7 @@ module github.com/ka1hung/uatester
 
 go 1.26.0
 
-require github.com/ka1hung/opcua v0.1.0
+require github.com/ka1hung/opcua v0.2.0
 
 require (
 	github.com/coder/websocket v1.8.14 // indirect
@@ -13,6 +13,3 @@ require (
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/term v0.46.0 // indirect
 )
-
-// Development against the opcua checkout next to this one; remove before committing.
-replace github.com/ka1hung/opcua => ../opcua
