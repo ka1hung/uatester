@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <title>uatester</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>uatester</h1>
+  <span id="version" class="muted"></span>
+  <span class="spacer"></span>
+  <span class="muted"><span data-i18n="app.data"></span>: <code id="datadir"></code></span>
+  <button id="lang" class="ghost" data-i18n="lang.switch"></button>
+</header>
+
+<main>
+  <!-- ───────────── Server ───────────── -->
+  <section class="panel" id="server">
+    <div class="panel-head">
+      <h2 data-i18n="server.title"></h2>
+      <span id="srv-state" class="chip"></span>
+      <span class="spacer"></span>
+      <button id="srv-toggle" class="primary"></button>
+    </div>
+    <div id="srv-error" class="error" hidden></div>
+    <p id="srv-summary" class="muted" hidden></p>
+
+    <form id="srv-form" class="fields">
+      <label><span data-i18n="server.addr"></span><input name="addr"></label>
+      <label><span data-i18n="server.host"></span><input name="host" data-i18n-ph="server.host.ph"></label>
+      <label><span data-i18n="server.points"></span><input name="points" type="number" min="1" max="100000"></label>
+      <label><span data-i18n="server.interval"></span><input name="intervalMs" type="number" min="10"></label>
+      <label><span data-i18n="server.history"></span><input name="history" type="number" min="0"></label>
+      <label class="check wide"><input name="autoTrust" type="checkbox"><span data-i18n="server.autotrust"></span></label>
+      <label class="check wide"><input name="legacy" type="checkbox"><span data-i18n="server.legacy"></span></label>
+      <p class="muted wide" data-i18n="server.users"></p>
+    </form>
+
+    <div id="srv-live" hidden>
+      <div class="stats">
+        <div><span data-i18n="server.connections"></span><b id="st-conn">0</b></div>
+        <div><span data-i18n="server.sessions"></span><b id="st-sess">0</b></div>
+        <div><span data-i18n="server.subscriptions"></span><b id="st-subs">0</b></div>
+        <div><span data-i18n="server.memory"></span><b id="st-mem">0</b></div>
+      </div>
+      <details id="srv-endpoints">
+        <summary><span data-i18n="server.endpoints"></span> (<span id="ep-count">0</span>)</summary>
+        <table class="grid"><tbody id="ep-rows"></tbody></table>
+      </details>
+
+      <nav class="tabs" data-group="srv">
+        <button data-tab="points" data-i18n="tab.points" class="active"></button>
+        <button data-tab="alarms" data-i18n="tab.alarms"></button>
+        <button data-tab="sessions" data-i18n="tab.sessions"></button>
+        <button data-tab="certs" data-i18n="tab.certs"></button>
+      </nav>
+
+      <div class="tab" data-group="srv" data-tab="points">
+        <div class="bar">
+          <label class="check"><input id="pt-sim" type="checkbox" checked><span data-i18n="points.simulate"></span></label>
+          <input id="pt-filter" data-i18n-ph="points.filter.ph">
+          <span id="pt-count" class="muted"></span>
+        </div>
+        <div class="scroll">
+          <table class="grid">
+            <thead><tr>
+              <th data-i18n="points.name"></th><th data-i18n="points.value" class="num"></th>
+              <th data-i18n="points.status"></th><th data-i18n="points.time"></th><th></th>
+            </tr></thead>
+            <tbody id="pt-rows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab" data-group="srv" data-tab="alarms" hidden>
+        <form id="al-form" class="bar">
+          <label><span data-i18n="alarms.point"></span><input name="point" list="pt-names" value="P0001_Temp"></label>
+          <label><span data-i18n="alarms.severity"></span><input name="severity" type="number" min="1" max="1000" value="500" class="short"></label>
+          <label class="grow"><span data-i18n="alarms.message"></span><input name="message" data-i18n-ph="alarms.message.ph"></label>
+          <button type="button" id="al-raise" data-i18n="alarms.raise"></button>
+          <button type="button" id="al-clear" class="ghost" data-i18n="alarms.clear"></button>
+        </form>
+        <datalist id="pt-names"></datalist>
+        <form id="ev-form" class="bar">
+          <input name="message" class="grow" data-i18n-ph="alarms.event.ph">
+          <button data-i18n="alarms.fire"></button>
+        </form>
+        <p class="muted" data-i18n="alarms.hint"></p>
+        <div class="scroll">
+          <table class="grid">
+            <thead><tr>
+              <th data-i18n="alarms.source"></th><th data-i18n="alarms.name"></th><th data-i18n="alarms.state"></th>
+              <th data-i18n="alarms.severity" class="num"></th><th data-i18n="alarms.message"></th><th data-i18n="points.time"></th><th></th>
+            </tr></thead>
+            <tbody id="al-rows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab" data-group="srv" data-tab="sessions" hidden>
+        <div class="scroll">
+          <table class="grid">
+            <thead><tr>
+              <th data-i18n="sessions.client"></th><th data-i18n="sessions.user"></th>
+              <th data-i18n="server.subscriptions" class="num"></th><th data-i18n="sessions.last"></th>
+            </tr></thead>
+            <tbody id="se-rows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab" data-group="srv" data-tab="certs" hidden>
+        <div class="bar">
+          <p class="muted grow" data-i18n="certs.hint"></p>
+          <button id="ce-refresh" class="ghost" data-i18n="certs.refresh"></button>
+        </div>
+        <div class="scroll">
+          <table class="grid">
+            <thead><tr>
+              <th data-i18n="certs.subject"></th><th data-i18n="certs.uri"></th><th data-i18n="certs.expires"></th><th></th>
+            </tr></thead>
+            <tbody id="ce-rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────── Client ───────────── -->
+  <section class="panel" id="client">
+    <div class="panel-head">
+      <h2 data-i18n="client.title"></h2>
+      <span id="cl-state" class="chip"></span>
+      <span id="cl-conn" class="muted"></span>
+      <span class="spacer"></span>
+      <button id="cl-toggle" class="primary"></button>
+    </div>
+    <div id="cl-error" class="error" hidden></div>
+
+    <form id="cl-form" class="fields">
+      <label class="wide"><span data-i18n="client.endpoint"></span><input name="endpoint" value="opc.tcp://localhost:4840"></label>
+      <label class="wide"><span data-i18n="client.security"></span><select name="security"></select></label>
+      <label><span data-i18n="client.user"></span><input name="user" data-i18n-ph="client.user.ph"></label>
+      <label><span data-i18n="client.password"></span><input name="password" type="password"></label>
+    </form>
+
+    <nav class="tabs" data-group="cl">
+      <button data-tab="browse" data-i18n="tab.browse" class="active"></button>
+      <button data-tab="watch" data-i18n="tab.watch"></button>
+      <button data-tab="history" data-i18n="tab.history"></button>
+      <button data-tab="stress" data-i18n="tab.stress"></button>
+    </nav>
+
+    <div class="tab" data-group="cl" data-tab="browse">
+      <div class="split">
+        <div class="tree scroll" id="tree"></div>
+        <div class="node-detail">
+          <p id="nd-empty" class="muted" data-i18n="browse.select"></p>
+          <div id="nd" hidden>
+            <h3 id="nd-name"></h3>
+            <code id="nd-id"></code> <span id="nd-class" class="chip"></span>
+            <dl id="nd-value"></dl>
+            <div class="bar">
+              <button id="nd-read" data-i18n="browse.read"></button>
+              <button id="nd-watch" class="ghost" data-i18n="browse.watch"></button>
+              <button id="nd-hist" class="ghost" data-i18n="browse.history"></button>
+            </div>
+            <form id="nd-write" class="bar">
+              <input name="value" class="grow" data-i18n-ph="browse.value.ph">
+              <button data-i18n="browse.write"></button>
+            </form>
+            <p id="nd-msg" class="muted"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab" data-group="cl" data-tab="watch" hidden>
+      <form id="wa-form" class="bar">
+        <input name="node" class="grow" data-i18n-ph="watch.node.ph">
+        <button data-i18n="watch.add"></button>
+        <label><span data-i18n="watch.interval"></span><input name="interval" type="number" min="50" value="500" class="short"></label>
+      </form>
+      <div class="scroll">
+        <table class="grid">
+          <thead><tr>
+            <th data-i18n="watch.node"></th><th data-i18n="points.value" class="num"></th>
+            <th data-i18n="points.status"></th><th data-i18n="points.time"></th><th></th>
+          </tr></thead>
+          <tbody id="wa-rows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tab" data-group="cl" data-tab="history" hidden>
+      <form id="hi-form" class="bar">
+        <label class="grow"><span data-i18n="history.node"></span><input name="node" value="ns=2;s=P0000_Temp"></label>
+        <label><span data-i18n="history.agg"></span><select name="agg">
+          <option value="raw" data-i18n="history.agg.raw"></option>
+          <option value="average" data-i18n="history.agg.average"></option>
+          <option value="minimum" data-i18n="history.agg.minimum"></option>
+          <option value="maximum" data-i18n="history.agg.maximum"></option>
+          <option value="count" data-i18n="history.agg.count"></option>
+          <option value="start" data-i18n="history.agg.start"></option>
+          <option value="end" data-i18n="history.agg.end"></option>
+        </select></label>
+        <label><span data-i18n="history.from"></span><input name="from" type="number" min="1" value="10" class="short"></label>
+        <label><span data-i18n="history.interval"></span><input name="interval" type="number" min="0" value="60" class="short"></label>
+        <button data-i18n="history.read"></button>
+      </form>
+      <div id="hi-out"></div>
+    </div>
+
+    <div class="tab" data-group="cl" data-tab="stress" hidden>
+      <p class="muted" data-i18n="stress.hint"></p>
+      <form id="sx-form" class="bar">
+        <label><span data-i18n="stress.clients"></span><input name="clients" type="number" min="1" value="10" class="short"></label>
+        <label><span data-i18n="stress.points"></span><input name="points" type="number" min="1" value="100" class="short"></label>
+        <label><span data-i18n="stress.interval"></span><input name="intervalMs" type="number" min="50" value="500" class="short"></label>
+        <label><span data-i18n="stress.duration"></span><input name="durationSec" type="number" min="1" value="60" class="short"></label>
+        <button id="sx-toggle" class="primary" data-i18n="stress.start"></button>
+      </form>
+      <div class="stats" id="sx-stats"></div>
+    </div>
+  </section>
+</main>
+
+<section id="log">
+  <div class="panel-head">
+    <h2 data-i18n="log.title"></h2>
+    <nav class="seg" id="log-filter">
+      <button data-side="" data-i18n="log.all" class="active"></button>
+      <button data-side="server" data-i18n="log.server"></button>
+      <button data-side="client" data-i18n="log.client"></button>
+    </nav>
+    <span class="spacer"></span>
+    <button id="log-clear" class="ghost" data-i18n="log.clear"></button>
+  </div>
+  <div id="log-lines" class="scroll"></div>
+</section>
+
+<div id="tooltip" class="tooltip" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
