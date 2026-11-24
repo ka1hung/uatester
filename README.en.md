@@ -24,10 +24,16 @@ The **server** is on the left, the **client** on the right, and a log shared by 
 - Users: `admin/admin` reads, writes and acknowledges; `viewer/viewer` and anonymous only read.
 
 **Client**
-- Enter the endpoint URL, pick security and user, and connect. "Connect client here" in the server's endpoint list fills these in.
-- Browse: the node tree; picking a variable reads it, and you can write it, watch it or look at its history.
-- Watch: subscribe to several nodes and see values change live.
-- History: raw values or aggregates (average, minimum, maximum, count, first / last in interval), as a line chart and a table.
+The client covers what the server offers, so it tests this tool's server as well as other vendors' servers.
+
+- Connect: enter the endpoint URL, pick security and user. "Endpoints" lists the security and logins the server offers; click one to use it. "Connect client here" in the server's endpoint list works too. Once connected, the server's product, version and state are shown.
+- Browse: the node tree. A picked node shows its description, data type and what this user may do (read, write, history, execute).
+  - Variables: read on pick; write, watch, or look at history.
+  - Methods: a field per argument from the method's definition; Call shows the outputs.
+  - Objects with events: subscribe to their events or read their event history.
+- Watch: subscribe to several nodes and see values change live, with an optional deadband (absolute or percent).
+- Alarms & events: subscribe to the Server object or an area. Current alarms lists active and unacknowledged alarms, with Acknowledge; alarms already active before connecting are fetched too. The event log lists the latest events.
+- History: raw values or aggregates (average, minimum, maximum, count, first / last in interval) as a line chart and a table, and event history.
 - Load test: many clients subscribe to this tool's server points at once; notifications per second are measured.
 
 The server's and the client's certificates live in `%APPDATA%\uatester`, so they survive moving the program, and other products trust them only once.
@@ -38,11 +44,17 @@ The interface switches between Traditional Chinese and English, and follows Wind
 
 ```
 uatest server    [-addr 0.0.0.0:4840 -host 192.168.1.10 -points 3000 -interval 500ms -history 200 -stats 1m]
-uatest browse    -ep opc.tcp://host:4840 [-node i=85]
+uatest endpoints -ep opc.tcp://host:4840
+uatest status    -ep ...
+uatest browse    -ep ... [-node i=85]
+uatest attrs     -ep ... -node "ns=2;s=P0000_Temp"
 uatest read      -ep ... -node "ns=2;s=P0000_Temp" [-node ...]
 uatest write     -ep ... -node "ns=2;s=Setpoint" -value 23 -user admin -pass admin
-uatest subscribe -ep ... -node "ns=2;s=P0000_Temp" [-interval 500ms]
+uatest subscribe -ep ... -node "ns=2;s=P0000_Temp" [-interval 500ms -deadband 0.5 | -pctdeadband 1]
+uatest call      -ep ... -object "ns=2;s=Plant" -method "ns=2;s=Plant.Reset" -arg "reason" -user admin -pass admin
+uatest events    -ep ... [-node "ns=2;s=Plant"] [-ack -comment "seen"] -user admin -pass admin
 uatest history   -ep ... -node "ns=2;s=P0000_Temp" [-agg average -from 1h -interval 10m]
+uatest history   -ep ... -node "ns=2;s=Plant" -agg events -from 1h
 uatest stress    -ep ... -clients 10 -points 3000 -interval 500ms -duration 5m
 ```
 
@@ -87,7 +99,7 @@ WAILS_SERVER_PORT=8080 bin/uatester-web.exe      # then open http://localhost:80
 go test ./...
 ```
 
-The `core` tests start the simulated server and connect a real client: read/write permissions, values set by hand, history, alarms, certificate trust, load test.
+The `core` tests start the simulated server and connect a real client: read/write permissions, values set by hand, history, an alarm raised by the server then received and acknowledged by the client, method calls, events, certificate trust, load test.
 
 ## Layout
 

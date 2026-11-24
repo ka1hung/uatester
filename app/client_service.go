@@ -23,6 +23,7 @@ type ClientService struct {
 	c      *client.Client
 	stop   chan struct{}
 	sub    *client.Subscription
+	events *client.EventSubscription
 	stress context.CancelFunc
 }
 
@@ -100,8 +101,8 @@ func (s *ClientService) watchState(c *client.Client, stop chan struct{}) {
 // Disconnect closes the connection.
 func (s *ClientService) Disconnect() {
 	s.mu.Lock()
-	c, stop, sub := s.c, s.stop, s.sub
-	s.c, s.stop, s.sub = nil, nil, nil
+	c, stop, sub, evs := s.c, s.stop, s.sub, s.events
+	s.c, s.stop, s.sub, s.events = nil, nil, nil, nil
 	s.mu.Unlock()
 	if c == nil {
 		return
@@ -109,6 +110,9 @@ func (s *ClientService) Disconnect() {
 	close(stop)
 	if sub != nil {
 		_ = sub.Close()
+	}
+	if evs != nil {
+		_ = evs.Close()
 	}
 	_ = c.Close()
 	s.logs.printf("client", "info", "disconnected")
@@ -233,7 +237,8 @@ func (s *ClientService) Write(nodeID, value string) error {
 
 // Watch subscribes to the nodes, replacing the earlier subscription. Each
 // change arrives as a "client:value" event. An empty list unsubscribes.
-func (s *ClientService) Watch(nodeIDs []string, intervalMs int) ([]Value, error) {
+// deadbandKind is "", "absolute" or "percent".
+func (s *ClientService) Watch(nodeIDs []string, intervalMs int, deadbandKind string, deadband float64) ([]Value, error) {
 	c, err := s.conn()
 	if err != nil {
 		return nil, err
@@ -250,7 +255,14 @@ func (s *ClientService) Watch(nodeIDs []string, intervalMs int) ([]Value, error)
 	}
 	ctx, cancel := s.ctx()
 	defer cancel()
-	sub, results, err := c.Subscribe(ctx, nodeIDs, time.Duration(intervalMs)*time.Millisecond, func(id string, r client.Result) {
+	o := client.SubscribeOptions{Interval: time.Duration(intervalMs) * time.Millisecond}
+	switch deadbandKind {
+	case "absolute":
+		o.AbsoluteDeadband = deadband
+	case "percent":
+		o.PercentDeadband = deadband
+	}
+	sub, results, err := c.SubscribeWith(ctx, nodeIDs, o, func(id string, r client.Result) {
 		r.NodeID = id
 		s.emit("client:value", toValue(r))
 	})
@@ -339,4 +351,234 @@ func (s *ClientService) ServiceShutdown() error {
 	s.StopStress()
 	s.Disconnect()
 	return nil
+}
+
+// Endpoint is one endpoint a server offers.
+type Endpoint struct {
+	URL        string   `json:"url"`
+	Policy     string   `json:"policy"`
+	Mode       string   `json:"mode"`
+	Level      byte     `json:"level"`
+	Logins     []string `json:"logins"`
+	ServerName string   `json:"serverName"`
+}
+
+// Endpoints lists a server's endpoints without connecting.
+func (s *ClientService) Endpoints(url string) ([]Endpoint, error) {
+	eps, err := client.Endpoints(context.Background(), strings.TrimSpace(url), 5*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Endpoint, 0, len(eps))
+	for _, e := range eps {
+		out = append(out, Endpoint{URL: e.URL, Policy: e.Policy, Mode: e.Mode, Level: e.SecurityLevel, Logins: e.UserTokens, ServerName: e.ServerName})
+	}
+	return out, nil
+}
+
+// Status is the connected server's state.
+type Status struct {
+	State   string    `json:"state"`
+	Product string    `json:"product"`
+	Version string    `json:"version"`
+	Maker   string    `json:"maker"`
+	Started time.Time `json:"started"`
+	Now     time.Time `json:"now"`
+	Spaces  []string  `json:"namespaces"`
+}
+
+// Status reads the server's state, product and namespaces.
+func (s *ClientService) Status() (Status, error) {
+	c, err := s.conn()
+	if err != nil {
+		return Status{}, err
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	st, err := c.ServerStatus(ctx)
+	if err != nil {
+		return Status{}, err
+	}
+	ns, _ := c.Namespaces(ctx)
+	return Status{State: st.State, Product: st.ProductName, Version: st.SoftwareVersion, Maker: st.ManufacturerName,
+		Started: st.StartTime, Now: st.CurrentTime, Spaces: ns}, nil
+}
+
+// NodeAttrs are a node's attributes as the window shows them.
+type NodeAttrs struct {
+	NodeClass   string `json:"nodeClass"`
+	BrowseName  string `json:"browseName"`
+	Description string `json:"description"`
+	DataType    string `json:"dataType"`
+	ValueRank   int32  `json:"valueRank"`
+	CanRead     bool   `json:"canRead"`
+	CanWrite    bool   `json:"canWrite"`
+	History     bool   `json:"history"`
+	Events      bool   `json:"events"`
+	Executable  bool   `json:"executable"`
+	UserExec    bool   `json:"userExecutable"`
+}
+
+// Attributes reads a node's attributes.
+func (s *ClientService) Attributes(nodeID string) (NodeAttrs, error) {
+	c, err := s.conn()
+	if err != nil {
+		return NodeAttrs{}, err
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	a, err := c.Attributes(ctx, nodeID)
+	if err != nil {
+		return NodeAttrs{}, err
+	}
+	return NodeAttrs{NodeClass: strings.TrimPrefix(a.NodeClass.String(), "NodeClass"), BrowseName: a.BrowseName,
+		Description: a.Description, DataType: a.DataType, ValueRank: a.ValueRank, CanRead: a.CanRead(), CanWrite: a.CanWrite(),
+		History: a.HasHistory(), Events: a.HasEvents(), Executable: a.Executable, UserExec: a.UserExecutable}, nil
+}
+
+// Arg is one method argument.
+type Arg struct {
+	Name        string `json:"name"`
+	DataType    string `json:"dataType"`
+	Description string `json:"description"`
+}
+
+// MethodInfo lists a method's arguments.
+type MethodInfo struct {
+	In  []Arg `json:"in"`
+	Out []Arg `json:"out"`
+}
+
+// MethodArgs reads a method's arguments.
+func (s *ClientService) MethodArgs(method string) (MethodInfo, error) {
+	c, err := s.conn()
+	if err != nil {
+		return MethodInfo{}, err
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	in, out, err := c.MethodArguments(ctx, method)
+	conv := func(as []client.Argument) []Arg {
+		r := make([]Arg, 0, len(as))
+		for _, a := range as {
+			r = append(r, Arg{Name: a.Name, DataType: a.DataType, Description: a.Description})
+		}
+		return r
+	}
+	return MethodInfo{In: conv(in), Out: conv(out)}, err
+}
+
+// Call calls a method with arguments typed as text.
+func (s *ClientService) Call(object, method string, args []string) ([]any, error) {
+	c, err := s.conn()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	in := make([]any, len(args))
+	for i, a := range args {
+		in[i] = a
+	}
+	out, err := c.Call(ctx, object, method, in...)
+	if err != nil {
+		s.logs.printf("client", "error", "call %s: %v", method, err)
+		return nil, err
+	}
+	for i := range out {
+		out[i] = display(out[i])
+	}
+	s.logs.printf("client", "info", "call %s ok: %v", method, out)
+	return out, nil
+}
+
+// SubscribeEvents subscribes to the events and alarms of a notifier
+// (the Server object when empty), replacing the earlier event
+// subscription, and asks for the alarms already active. Each event
+// arrives as a "client:event" event.
+func (s *ClientService) SubscribeEvents(notifier string) error {
+	c, err := s.conn()
+	if err != nil {
+		return err
+	}
+	s.StopEvents()
+	notifier = strings.TrimSpace(notifier)
+	if notifier == "" {
+		notifier = client.ServerObject
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	sub, err := c.SubscribeEvents(ctx, notifier, 500*time.Millisecond, func(e client.Event) {
+		s.emit("client:event", core.FromClient(e))
+	})
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.events = sub
+	s.mu.Unlock()
+	s.logs.printf("client", "info", "subscribed to events of %s", notifier)
+	return sub.Refresh(ctx)
+}
+
+// RefreshEvents asks for every alarm still of interest again.
+func (s *ClientService) RefreshEvents() error {
+	s.mu.Lock()
+	sub := s.events
+	s.mu.Unlock()
+	if sub == nil {
+		return errors.New("not subscribed to events")
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	return sub.Refresh(ctx)
+}
+
+// StopEvents ends the event subscription.
+func (s *ClientService) StopEvents() {
+	s.mu.Lock()
+	sub := s.events
+	s.events = nil
+	s.mu.Unlock()
+	if sub != nil {
+		_ = sub.Close()
+	}
+}
+
+// Acknowledge acknowledges the alarm an event reports.
+func (s *ClientService) Acknowledge(ev core.Event, comment string) error {
+	c, err := s.conn()
+	if err != nil {
+		return err
+	}
+	ce, err := ev.ToClient()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	if err := c.Acknowledge(ctx, ce, comment); err != nil {
+		s.logs.printf("client", "error", "acknowledge %s: %v", ev.ConditionID, err)
+		return err
+	}
+	s.logs.printf("client", "info", "acknowledged %s", ev.ConditionID)
+	return nil
+}
+
+// HistoryEvents reads the events a notifier recorded in the last
+// fromMinutes.
+func (s *ClientService) HistoryEvents(notifier string, fromMinutes int) ([]core.Event, error) {
+	c, err := s.conn()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	end := time.Now()
+	evs, err := c.HistoryEvents(ctx, strings.TrimSpace(notifier), end.Add(-time.Duration(fromMinutes)*time.Minute), end, 0)
+	out := make([]core.Event, 0, len(evs))
+	for _, e := range evs {
+		out = append(out, core.FromClient(e))
+	}
+	return out, err
 }

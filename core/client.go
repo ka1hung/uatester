@@ -13,8 +13,6 @@ import (
 
 	"github.com/ka1hung/opcua/certs"
 	"github.com/ka1hung/opcua/client"
-	"github.com/ka1hung/opcua/id"
-	"github.com/ka1hung/opcua/ua"
 )
 
 // ClientConfig says how to connect to a server.
@@ -80,16 +78,6 @@ func security(s string) client.Security {
 	return client.Explicit(p, m)
 }
 
-// Aggregates lists the history aggregates History accepts besides raw.
-var Aggregates = map[string]uint32{
-	"average": id.AggregateFunction_Average,
-	"minimum": id.AggregateFunction_Minimum,
-	"maximum": id.AggregateFunction_Maximum,
-	"count":   id.AggregateFunction_Count,
-	"start":   id.AggregateFunction_Start,
-	"end":     id.AggregateFunction_End,
-}
-
 // HistoryValue is one value read from history.
 type HistoryValue struct {
 	Time   time.Time `json:"time"`
@@ -97,64 +85,28 @@ type HistoryValue struct {
 	Status string    `json:"status"`
 }
 
-// History reads a node's history over the last from: raw values, or with
-// an aggregate one value per interval (0: one for the whole range).
+// History reads a node's history over the last from: raw values (agg
+// "raw" or empty), or with an aggregate (average, minimum, maximum,
+// count, start, end) one value per interval (0: one for the whole range).
 func History(ctx context.Context, c *client.Client, node, agg string, from, interval time.Duration) ([]HistoryValue, error) {
-	nid, err := ua.ParseNodeID(node)
-	if err != nil {
-		return nil, err
-	}
 	end := time.Now()
 	start := end.Add(-from)
-	var details any
+	var vals []client.HistoryValue
+	var err error
 	if agg == "" || agg == "raw" {
-		details = &ua.ReadRawModifiedDetails{StartTime: start, EndTime: end}
+		vals, err = c.HistoryRaw(ctx, node, start, end, 0)
 	} else {
-		aid, ok := Aggregates[strings.ToLower(agg)]
-		if !ok {
-			return nil, fmt.Errorf("unknown aggregate %q", agg)
+		a, perr := client.ParseAggregate(agg)
+		if perr != nil {
+			return nil, perr
 		}
-		details = &ua.ReadProcessedDetails{
-			StartTime: start, EndTime: end, ProcessingInterval: float64(interval / time.Millisecond),
-			AggregateType:          []*ua.NodeID{ua.NewNumericNodeID(0, aid)},
-			AggregateConfiguration: &ua.AggregateConfiguration{UseServerCapabilitiesDefaults: true},
-		}
+		vals, err = c.HistoryProcessed(ctx, node, a, start, end, interval)
 	}
-	var out []HistoryValue
-	var cp []byte
-	for {
-		var res *ua.HistoryReadResult
-		err := c.Underlying().Send(ctx, &ua.HistoryReadRequest{
-			HistoryReadDetails: ua.NewExtensionObject(details),
-			TimestampsToReturn: ua.TimestampsToReturnSource,
-			NodesToRead:        []*ua.HistoryReadValueID{{NodeID: nid, ContinuationPoint: cp}},
-		}, func(r ua.Response) error {
-			resp, ok := r.(*ua.HistoryReadResponse)
-			if !ok || len(resp.Results) != 1 {
-				return fmt.Errorf("unexpected response %T", r)
-			}
-			res = resp.Results[0]
-			return nil
-		})
-		if err != nil {
-			return out, err
-		}
-		if res.StatusCode != ua.StatusOK {
-			return out, fmt.Errorf("%s: %s", node, StatusName(res.StatusCode))
-		}
-		if hd, ok := res.HistoryData.Value.(*ua.HistoryData); ok {
-			for _, dv := range hd.DataValues {
-				hv := HistoryValue{Time: dv.SourceTimestamp, Status: StatusName(dv.Status & 0xFFFF0000)}
-				if dv.Value != nil {
-					hv.Value = dv.Value.Value()
-				}
-				out = append(out, hv)
-			}
-		}
-		if cp = res.ContinuationPoint; cp == nil {
-			return out, nil
-		}
+	out := make([]HistoryValue, 0, len(vals))
+	for _, v := range vals {
+		out = append(out, HistoryValue{Time: v.SourceTime, Value: v.Value, Status: StatusName(v.Status & 0xFFFF0000)})
 	}
+	return out, err
 }
 
 // StressConfig is a load test: Clients clients each subscribe to the

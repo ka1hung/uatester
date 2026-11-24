@@ -24,10 +24,16 @@ OPC UA 測試工具：一個模擬伺服器加一個用戶端，可以互相測�
 - 帳號：`admin/admin` 可讀寫、可確認警報；`viewer/viewer` 與匿名只能讀。
 
 **用戶端**
-- 輸入端點 URL、選加密方式與帳號後連線。在伺服器的「端點」清單按「用戶端連這裡」可以直接帶入。
-- 瀏覽：節點樹，選到變數會自動讀值，也可以寫入、加入監看、查歷史。
-- 監看：訂閱多個節點，數值即時更新。
-- 歷史：原始值或聚合值（平均、最小、最大、筆數、區間第一 / 最後一筆），以折線圖與資料表顯示。
+用戶端的功能和伺服器一一對應，可以拿來測本工具的伺服器，也可以測其他廠牌的伺服器。
+
+- 連線：輸入端點 URL、選加密方式與帳號。按「查詢端點」會列出伺服器提供的加密組合與登入方式，點一下就帶入；在伺服器的「端點」清單按「用戶端連這裡」也可以。連線後顯示伺服器的產品、版本與狀態。
+- 瀏覽：節點樹。選到節點會顯示說明、資料型別與這個帳號的權限（可讀、可寫、有歷史、可執行）。
+  - 變數：自動讀值，可以寫入、加入監看、查歷史。
+  - 方法：依方法定義列出參數欄位，填好按「呼叫」，顯示輸出結果。
+  - 有事件的物件：可以直接訂閱它的事件、查它的事件歷史。
+- 監看：訂閱多個節點，數值即時更新；可以設定 deadband（絕對值或百分比）。
+- 警報與事件：訂閱 Server 物件或某個區域的事件。「目前警報」列出作用中與還沒確認的警報，可以直接確認；連線前就已作用的警報也會補上。「事件紀錄」列出最近收到的事件。
+- 歷史：原始值、聚合值（平均、最小、最大、筆數、區間第一 / 最後一筆）以折線圖與資料表顯示；也可以查事件歷史。
 - 壓力測試：多個用戶端同時訂閱本工具伺服器的點位，量測每秒通知數。
 
 伺服器與用戶端的憑證存在 `%APPDATA%\uatester`，換位置執行也會沿用，其他產品只需要信任一次。
@@ -38,11 +44,17 @@ OPC UA 測試工具：一個模擬伺服器加一個用戶端，可以互相測�
 
 ```
 uatest server    [-addr 0.0.0.0:4840 -host 192.168.1.10 -points 3000 -interval 500ms -history 200 -stats 1m]
-uatest browse    -ep opc.tcp://host:4840 [-node i=85]
+uatest endpoints -ep opc.tcp://host:4840
+uatest status    -ep ...
+uatest browse    -ep ... [-node i=85]
+uatest attrs     -ep ... -node "ns=2;s=P0000_Temp"
 uatest read      -ep ... -node "ns=2;s=P0000_Temp" [-node ...]
 uatest write     -ep ... -node "ns=2;s=Setpoint" -value 23 -user admin -pass admin
-uatest subscribe -ep ... -node "ns=2;s=P0000_Temp" [-interval 500ms]
+uatest subscribe -ep ... -node "ns=2;s=P0000_Temp" [-interval 500ms -deadband 0.5 | -pctdeadband 1]
+uatest call      -ep ... -object "ns=2;s=Plant" -method "ns=2;s=Plant.Reset" -arg "reason" -user admin -pass admin
+uatest events    -ep ... [-node "ns=2;s=Plant"] [-ack -comment "seen"] -user admin -pass admin
 uatest history   -ep ... -node "ns=2;s=P0000_Temp" [-agg average -from 1h -interval 10m]
+uatest history   -ep ... -node "ns=2;s=Plant" -agg events -from 1h
 uatest stress    -ep ... -clients 10 -points 3000 -interval 500ms -duration 5m
 ```
 
@@ -87,7 +99,7 @@ WAILS_SERVER_PORT=8080 bin/uatester-web.exe      # 然後開 http://localhost:80
 go test ./...
 ```
 
-`core` 的測試會啟動模擬伺服器，用用戶端實際連線：讀寫權限、手動設值、歷史、警報、憑證信任、壓力測試。
+`core` 的測試會啟動模擬伺服器，用用戶端實際連線：讀寫權限、手動設值、歷史、伺服器觸發警報 → 用戶端收到並確認、方法呼叫、事件、憑證信任、壓力測試。
 
 ## 目錄
 

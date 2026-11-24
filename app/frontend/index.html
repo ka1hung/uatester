@@ -137,9 +137,18 @@
       <button id="cl-toggle" class="primary"></button>
     </div>
     <div id="cl-error" class="error" hidden></div>
+    <p id="cl-status" class="muted" hidden></p>
 
     <form id="cl-form" class="fields">
-      <label class="wide"><span data-i18n="client.endpoint"></span><input name="endpoint" value="opc.tcp://localhost:4840"></label>
+      <div class="wide endpoint-row">
+        <label class="grow"><span data-i18n="client.endpoint"></span><input name="endpoint" value="opc.tcp://localhost:4840"></label>
+        <button type="button" id="cl-endpoints" class="ghost" data-i18n="client.endpoints"></button>
+      </div>
+      <div class="wide" id="cl-eplist" hidden>
+        <table class="grid"><thead><tr>
+          <th data-i18n="client.ep.policy"></th><th data-i18n="client.ep.mode"></th><th data-i18n="client.ep.logins"></th><th></th>
+        </tr></thead><tbody id="cl-eprows"></tbody></table>
+      </div>
       <label class="wide"><span data-i18n="client.security"></span><select name="security"></select></label>
       <label><span data-i18n="client.user"></span><input name="user" data-i18n-ph="client.user.ph"></label>
       <label><span data-i18n="client.password"></span><input name="password" type="password"></label>
@@ -148,6 +157,7 @@
     <nav class="tabs" data-group="cl">
       <button data-tab="browse" data-i18n="tab.browse" class="active"></button>
       <button data-tab="watch" data-i18n="tab.watch"></button>
+      <button data-tab="events" data-i18n="tab.events"></button>
       <button data-tab="history" data-i18n="tab.history"></button>
       <button data-tab="stress" data-i18n="tab.stress"></button>
     </nav>
@@ -160,16 +170,29 @@
           <div id="nd" hidden>
             <h3 id="nd-name"></h3>
             <code id="nd-id"></code> <span id="nd-class" class="chip"></span>
-            <dl id="nd-value"></dl>
-            <div class="bar">
-              <button id="nd-read" data-i18n="browse.read"></button>
-              <button id="nd-watch" class="ghost" data-i18n="browse.watch"></button>
-              <button id="nd-hist" class="ghost" data-i18n="browse.history"></button>
+            <dl id="nd-attrs"></dl>
+            <div id="nd-var">
+              <dl id="nd-value"></dl>
+              <div class="bar">
+                <button id="nd-read" data-i18n="browse.read"></button>
+                <button id="nd-watch" class="ghost" data-i18n="browse.watch"></button>
+                <button id="nd-hist" class="ghost" data-i18n="browse.history"></button>
+              </div>
+              <form id="nd-write" class="bar">
+                <input name="value" class="grow" data-i18n-ph="browse.value.ph">
+                <button data-i18n="browse.write"></button>
+              </form>
             </div>
-            <form id="nd-write" class="bar">
-              <input name="value" class="grow" data-i18n-ph="browse.value.ph">
-              <button data-i18n="browse.write"></button>
+            <form id="nd-method" class="method" hidden>
+              <h3 data-i18n="browse.method"></h3>
+              <div id="nd-args"></div>
+              <div class="bar"><button class="primary" data-i18n="browse.call"></button></div>
+              <dl id="nd-out"></dl>
             </form>
+            <div id="nd-obj" class="bar" hidden>
+              <button id="nd-events" class="ghost" data-i18n="browse.events"></button>
+              <button id="nd-evhist" class="ghost" data-i18n="browse.evhistory"></button>
+            </div>
             <p id="nd-msg" class="muted"></p>
           </div>
         </div>
@@ -181,6 +204,12 @@
         <input name="node" class="grow" data-i18n-ph="watch.node.ph">
         <button data-i18n="watch.add"></button>
         <label><span data-i18n="watch.interval"></span><input name="interval" type="number" min="50" value="500" class="short"></label>
+        <label><span data-i18n="watch.deadband"></span><select name="dbkind">
+          <option value="" data-i18n="watch.db.none"></option>
+          <option value="absolute" data-i18n="watch.db.absolute"></option>
+          <option value="percent" data-i18n="watch.db.percent"></option>
+        </select></label>
+        <label><span data-i18n="watch.dbvalue"></span><input name="dbvalue" type="number" min="0" step="any" value="0" class="short"></label>
       </form>
       <div class="scroll">
         <table class="grid">
@@ -189,6 +218,35 @@
             <th data-i18n="points.status"></th><th data-i18n="points.time"></th><th></th>
           </tr></thead>
           <tbody id="wa-rows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tab" data-group="cl" data-tab="events" hidden>
+      <form id="ev-sub" class="bar">
+        <label class="grow"><span data-i18n="events.notifier"></span><input name="notifier" value="i=2253"></label>
+        <button id="ev-toggle" class="primary" data-i18n="events.subscribe"></button>
+        <button type="button" id="ev-refresh" class="ghost" data-i18n="events.refresh"></button>
+      </form>
+      <p class="muted" data-i18n="events.hint"></p>
+      <h3 data-i18n="events.alarms"></h3>
+      <div class="scroll short-scroll">
+        <table class="grid">
+          <thead><tr>
+            <th data-i18n="alarms.source"></th><th data-i18n="alarms.name"></th><th data-i18n="alarms.state"></th>
+            <th data-i18n="alarms.severity" class="num"></th><th data-i18n="alarms.message"></th><th data-i18n="points.time"></th><th></th>
+          </tr></thead>
+          <tbody id="ev-alarms"></tbody>
+        </table>
+      </div>
+      <h3 data-i18n="events.log"></h3>
+      <div class="scroll">
+        <table class="grid">
+          <thead><tr>
+            <th data-i18n="points.time"></th><th data-i18n="events.type"></th><th data-i18n="alarms.source"></th>
+            <th data-i18n="alarms.severity" class="num"></th><th data-i18n="alarms.message"></th>
+          </tr></thead>
+          <tbody id="ev-log"></tbody>
         </table>
       </div>
     </div>
@@ -204,6 +262,7 @@
           <option value="count" data-i18n="history.agg.count"></option>
           <option value="start" data-i18n="history.agg.start"></option>
           <option value="end" data-i18n="history.agg.end"></option>
+          <option value="events" data-i18n="history.agg.events"></option>
         </select></label>
         <label><span data-i18n="history.from"></span><input name="from" type="number" min="1" value="10" class="short"></label>
         <label><span data-i18n="history.interval"></span><input name="interval" type="number" min="0" value="60" class="short"></label>

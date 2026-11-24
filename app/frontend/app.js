@@ -98,6 +98,10 @@ function relabel() {
   renderWatch();
   if (lastHistory) renderHistory(...lastHistory);
   showStress(lastStress);
+  renderEvents();
+  showStatus();
+  showEventsState();
+  if (selected) showDetail();
   $$("#log-lines .side").forEach(s => { s.textContent = t("log." + s.parentElement.dataset.side); });
 }
 
@@ -320,7 +324,10 @@ function showClientState() {
   chip.textContent = clState === "Connected" ? t("client.connected") : on ? clState : t("client.disconnected");
   $("#cl-conn").textContent = !on ? "" : connected.policy === "None" ? "None" : `${connected.policy} ${connected.mode}`;
   $("#cl-toggle").textContent = t(on ? "client.disconnect" : "client.connect");
-  $$("input, select", clForm).forEach(i => { i.disabled = on; });
+  // While connected the settings collapse into the status line.
+  clForm.hidden = on;
+  if (on) $("#cl-eplist").hidden = true;
+  showStatus();
 }
 
 async function connectToggle() {
@@ -332,10 +339,16 @@ async function connectToggle() {
       await call("ClientService", "Disconnect");
       connected = null;
       clState = "Closed";
+      status = null;
+      eventsOn = false;
+      showStatus();
+      showEventsState();
     } else {
       connected = await call("ClientService", "Connect", clientParams());
       clState = "Connected";
+      $("#cl-eplist").hidden = true;
       loadTree();
+      loadStatus();
       if (watchIds.length) applyWatch();
     }
   } catch (err) {
@@ -364,6 +377,7 @@ function loadTree() {
 }
 
 async function expand(ul, nodeId, open = []) {
+  const parent = nodeId;
   let items;
   try { items = await call("ClientService", "Browse", nodeId); } catch (err) { showError(clErr, err); return; }
   ul.replaceChildren(...(items || []).map(it => {
@@ -376,7 +390,7 @@ async function expand(ul, nodeId, open = []) {
       if (children.childElementCount) twist.textContent = children.hidden ? "▸" : "▾";
     };
     twist.addEventListener("click", e => { e.stopPropagation(); toggle(); });
-    const row = h("div", { class: "node", onclick: () => select(it, row), ondblclick: toggle },
+    const row = h("div", { class: "node", onclick: () => select({ ...it, parent }, row), ondblclick: toggle },
       twist, h("span", {}, it.displayName || it.browseName), h("span", { class: "cls" }, it.nodeClass));
     if (open.includes(it.nodeId)) toggle();
     return h("li", {}, row, children);
@@ -393,9 +407,90 @@ function select(item, row) {
   $("#nd-id").textContent = item.nodeId;
   $("#nd-class").textContent = item.nodeClass;
   $("#nd-value").replaceChildren();
+  $("#nd-out").replaceChildren();
   $("#nd-msg").textContent = "";
+  selectedAttrs = null;
+  selectedArgs = null;
+  showDetail();
+  loadDetail(item);
   if (item.nodeClass === "Variable") readSelected();
 }
+
+let selectedAttrs = null;
+let selectedArgs = null;
+
+async function loadDetail(item) {
+  try {
+    const a = await call("ClientService", "Attributes", item.nodeId);
+    if (selected !== item) return;
+    selectedAttrs = a;
+    if (item.nodeClass === "Method") {
+      selectedArgs = await call("ClientService", "MethodArgs", item.nodeId);
+      if (selected !== item) return;
+    }
+    showDetail();
+  } catch (err) { showError(clErr, err); }
+}
+
+function showDetail() {
+  const item = selected, a = selectedAttrs;
+  $("#nd-var").hidden = item.nodeClass !== "Variable";
+  $("#nd-method").hidden = item.nodeClass !== "Method";
+  $("#nd-obj").hidden = !(a && a.events);
+  const rows = [];
+  if (a) {
+    if (a.description) rows.push([t("attr.description"), a.description]);
+    if (a.dataType) rows.push([t("attr.datatype"), a.dataType + (a.valueRank >= 0 ? " []" : "")]);
+    const yes = [], no = [];
+    if (item.nodeClass === "Variable") {
+      (a.canRead ? yes : no).push(t("attr.read"));
+      (a.canWrite ? yes : no).push(t("attr.write"));
+      if (a.history) yes.push(t("attr.history"));
+    }
+    if (a.events) yes.push(t("attr.events"));
+    if (a.history && item.nodeClass !== "Variable") yes.push(t("attr.history"));
+    if (item.nodeClass === "Method") (a.userExecutable ? yes : no).push(t("attr.exec"));
+    if (yes.length || no.length) {
+      rows.push([t("attr.access"), yes.join("、") + (no.length ? `（${t("attr.denied")} ${no.join("、")}）` : "")]);
+    }
+  }
+  $("#nd-attrs").replaceChildren(...rows.flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)]));
+  if (item.nodeClass === "Method") {
+    const args = selectedArgs?.in || [];
+    $("#nd-args").replaceChildren(...(args.length ? args.map((x, i) => h("label", {},
+      h("span", {}, `${x.name} (${x.dataType})`), h("input", { name: "arg" + i, title: x.description || "" })))
+      : [h("p", { class: "muted" }, t("browse.noargs"))]));
+  }
+}
+
+$("#nd-method").addEventListener("submit", async e => {
+  e.preventDefault();
+  const n = selectedArgs?.in?.length || 0;
+  const args = Array.from({ length: n }, (_, i) => e.target.elements["arg" + i].value);
+  try {
+    const out = await call("ClientService", "Call", selected.parent, selected.nodeId, args);
+    showError(clErr, null);
+    const names = selectedArgs?.out || [];
+    $("#nd-out").replaceChildren(h("dt", {}, "✓"), h("dd", {}, t("browse.called")),
+      ...(out || []).flatMap((v, i) => [h("dt", {}, names[i]?.name || "out " + (i + 1)), h("dd", {}, fmtValue(v))]));
+  } catch (err) {
+    showError(clErr, err);
+    $("#nd-out").replaceChildren();
+  }
+});
+
+$("#nd-events").addEventListener("click", () => {
+  $("#ev-sub").notifier.value = selected.nodeId;
+  selectTab("cl", "events");
+  subscribeEvents();
+});
+$("#nd-evhist").addEventListener("click", () => {
+  const hf = $("#hi-form");
+  hf.node.value = selected.nodeId;
+  hf.agg.value = "events";
+  selectTab("cl", "history");
+  readHistory();
+});
 
 async function readSelected() {
   if (!selected) return;
@@ -441,7 +536,8 @@ async function applyWatch() {
   renderWatch();
   if (!connected) return;
   try {
-    const vals = await call("ClientService", "Watch", watchIds, Number($("#wa-form").interval.value) || 500);
+    const wf = $("#wa-form");
+    const vals = await call("ClientService", "Watch", watchIds, Number(wf.interval.value) || 500, wf.dbkind.value, Number(wf.dbvalue.value) || 0);
     for (const v of vals || []) watchVals.set(v.nodeId, v);
     showError(clErr, null);
   } catch (err) { showError(clErr, err); }
@@ -481,7 +577,7 @@ function showWatch(v) {
 
 Events.On("client:value", ev => { watchVals.set(ev.data.nodeId, ev.data); showWatch(ev.data); });
 $("#wa-form").addEventListener("submit", e => { e.preventDefault(); addWatch(e.target.node.value); e.target.node.value = ""; });
-$("#wa-form").interval.addEventListener("change", () => { if (watchIds.length) applyWatch(); });
+["interval", "dbkind", "dbvalue"].forEach(n => $("#wa-form")[n].addEventListener("change", () => { if (watchIds.length) applyWatch(); }));
 
 // history
 
@@ -490,6 +586,16 @@ let lastHistory = null;
 async function readHistory() {
   const f = formData($("#hi-form"));
   const out = $("#hi-out");
+  if (f.agg === "events") {
+    try {
+      const evs = await call("ClientService", "HistoryEvents", f.node, f.from);
+      showError(clErr, null);
+      lastHistory = null;
+      out.replaceChildren(h("p", { class: "chart-title" }, `${f.node} · ${t("history.agg.events")} · ${t("history.count", (evs || []).length)}`),
+        (evs || []).length ? eventTable(evs) : h("p", { class: "muted" }, t("history.none")));
+    } catch (err) { showError(clErr, err); out.replaceChildren(); }
+    return;
+  }
   try {
     const vals = await call("ClientService", "History", f.node, f.agg, f.from, f.agg === "raw" ? 0 : f.interval);
     showError(clErr, null);
@@ -594,6 +700,131 @@ function lineChart(pts) {
   return svg;
 }
 
+// endpoints and server status
+
+$("#cl-endpoints").addEventListener("click", async () => {
+  showError(clErr, null);
+  const box = $("#cl-eplist");
+  try {
+    const eps = await call("ClientService", "Endpoints", clForm.endpoint.value);
+    $("#cl-eprows").replaceChildren(...(eps || []).map(ep => {
+      const sec = ep.policy === "None" ? "none" : `${ep.policy}:${ep.mode}`;
+      const use = () => { clForm.security.value = sec; box.hidden = true; };
+      return h("tr", { onclick: use }, h("td", {}, ep.policy), h("td", {}, ep.mode), h("td", {}, (ep.logins || []).join(", ")),
+        h("td", {}, h("button", { type: "button", class: "small ghost" }, t("client.ep.use"))));
+    }));
+    box.hidden = false;
+  } catch (err) { showError(clErr, err); box.hidden = true; }
+});
+
+let status = null;
+
+async function loadStatus() {
+  try { status = await call("ClientService", "Status"); } catch { status = null; }
+  showStatus();
+}
+
+function showStatus() {
+  const p = $("#cl-status");
+  p.hidden = !status || !connected;
+  if (!connected) return;
+  const f = formData(clForm);
+  const who = `${f.endpoint} · ${f.user || "anonymous"}`;
+  p.hidden = false;
+  p.textContent = status
+    ? `${who} · ${t("client.status", status.product, status.version, status.state, fmtTime(status.started, true).slice(0, 19))}`
+    : who;
+}
+
+// events and alarms
+
+let eventsOn = false;
+const alarms = new Map(); // condition id -> newest event
+let eventLog = [];
+
+function showEventsState() {
+  const btn = $("#ev-toggle");
+  btn.dataset.i18n = eventsOn ? "events.stop" : "events.subscribe";
+  btn.textContent = t(btn.dataset.i18n);
+  btn.className = eventsOn ? "ghost" : "primary";
+  $("#ev-refresh").disabled = !eventsOn;
+  $("#ev-sub").notifier.disabled = eventsOn;
+}
+
+async function subscribeEvents() {
+  showError(clErr, null);
+  alarms.clear();
+  eventLog = [];
+  renderEvents();
+  try {
+    await call("ClientService", "SubscribeEvents", $("#ev-sub").notifier.value);
+    eventsOn = true;
+  } catch (err) { showError(clErr, err); eventsOn = false; }
+  showEventsState();
+}
+
+$("#ev-sub").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (eventsOn) {
+    await call("ClientService", "StopEvents");
+    eventsOn = false;
+    showEventsState();
+  } else {
+    subscribeEvents();
+  }
+});
+$("#ev-refresh").addEventListener("click", async () => {
+  try { await call("ClientService", "RefreshEvents"); } catch (err) { showError(clErr, err); }
+});
+
+Events.On("client:event", ev => {
+  const e = ev.data;
+  if (e.type === "RefreshStart" || e.type === "RefreshEnd") return;
+  if (e.conditionId) {
+    if (e.retain) alarms.set(e.conditionId, e); else alarms.delete(e.conditionId);
+  }
+  eventLog.unshift(e);
+  if (eventLog.length > 300) eventLog.length = 300;
+  renderEvents();
+});
+
+function stateChips(e) {
+  return [h("span", { class: "chip " + (e.active ? "bad" : "off") }, t(e.active ? "alarms.active" : "alarms.inactive")),
+    e.acked ? " ✓ " + t("alarms.acked") : ""];
+}
+
+function renderEvents() {
+  const list = [...alarms.values()].sort((a, b) => b.severity - a.severity || (a.time < b.time ? 1 : -1));
+  renderRows($("#ev-alarms"), list, e => h("tr", {},
+    h("td", {}, e.sourceName || e.source), h("td", {}, e.conditionName), h("td", {}, stateChips(e)),
+    h("td", { class: "num" }, e.severity), h("td", { class: "wrap" }, e.message), h("td", {}, fmtTime(e.time)),
+    h("td", {}, e.acked ? "" : h("button", {
+      class: "small", onclick: async () => {
+        try {
+          await call("ClientService", "Acknowledge", e, "acknowledged in uatester");
+          showError(clErr, null);
+        } catch (err) { showError(clErr, err); }
+      },
+    }, t("alarms.ack")))), "events.noalarms");
+  const tb = $("#ev-log");
+  delete tb.dataset.key;
+  tb.replaceChildren(...(eventLog.length ? eventLog.slice(0, 300).map(eventRow)
+    : [h("tr", {}, h("td", { colspan: 5, class: "muted" }, t("events.none")))]));
+}
+
+function eventRow(e) {
+  const type = e.type === "Alarm" || e.type === "Condition" || e.type === "Event" ? t("evtype." + e.type) : e.type;
+  return h("tr", {}, h("td", {}, fmtTime(e.time)), h("td", {}, type, e.conditionId ? [" ", ...stateChips(e)] : ""),
+    h("td", {}, e.sourceName || e.source), h("td", { class: "num" }, e.severity), h("td", { class: "wrap" }, e.message));
+}
+
+function eventTable(evs) {
+  return h("div", { class: "scroll", style: "max-height: 420px" }, h("table", { class: "grid" },
+    h("thead", {}, h("tr", {}, h("th", {}, t("points.time")), h("th", {}, t("events.type")), h("th", {}, t("alarms.source")),
+      h("th", { class: "num" }, t("alarms.severity")), h("th", {}, t("alarms.message")))),
+    h("tbody", {}, evs.map(eventRow))));
+}
+
 // load test
 
 let stressRunning = false;
@@ -676,6 +907,8 @@ async function init() {
   (await call("AppService", "Logs") || []).forEach(logLine);
   showClientState();
   renderWatch();
+  renderEvents();
+  showEventsState();
   showStress(null);
   await refreshServer();
   setInterval(refreshServer, 1000);

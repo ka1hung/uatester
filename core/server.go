@@ -63,6 +63,7 @@ type Server struct {
 
 	mu       sync.Mutex
 	simulate bool
+	alarmWas map[string]string // last state and message of each alarm, to record history only on change
 
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -116,7 +117,7 @@ func StartServer(ctx context.Context, cfg ServerConfig, logger *slog.Logger) (*S
 
 	opts := []server.Option{
 		server.Certificate(cert), server.PrivateKey(key), server.ApplicationURI(appURI),
-		server.ServerName("uatester"), server.ProductName("uatester"), server.SoftwareVersion(Version),
+		server.ServerName("uatester"), server.ProductName("uatester"), server.ManufacturerName("uatester"), server.SoftwareVersion(Version),
 		server.EndPoint(cfg.Host, port), server.ListenAddress(cfg.Addr),
 		server.EnableSecurity("None", ua.MessageSecurityModeNone),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
@@ -266,9 +267,11 @@ func (s *Server) step(now time.Time, el float64) {
 		s.setValue(p, v, now)
 		if i%10 == 0 {
 			active := v > 80
-			msg := fmt.Sprintf("%s high: %.1f", p.name, v)
+			// A fixed message: the server sends an alarm event only when the
+			// state changes, not on every new value.
+			msg := p.name + " high (> 80)"
 			if !active {
-				msg = p.name + " normal"
+				msg = p.name + " back to normal"
 			}
 			s.setAlarm(p, "High", active, 700, msg, now)
 		}
@@ -284,10 +287,23 @@ func (s *Server) setValue(p *point, v any, now time.Time) {
 
 func (s *Server) setAlarm(p *point, name string, active bool, sev uint16, msg string, now time.Time) error {
 	err := s.srv.SetAlarm(server.Alarm{Source: p.id, Name: name, Active: active, Severity: sev, Message: msg, Time: now})
-	if err == nil && active && s.cfg.History > 0 {
+	if err != nil || s.cfg.History == 0 {
+		return err
+	}
+	// Record history when the alarm starts, changes or ends, not on every
+	// update that leaves it as it was.
+	k, now2 := p.name+"/"+name, fmt.Sprintf("%v|%d|%s", active, sev, msg)
+	s.mu.Lock()
+	if s.alarmWas == nil {
+		s.alarmWas = map[string]string{}
+	}
+	was, seen := s.alarmWas[k]
+	s.alarmWas[k] = now2
+	s.mu.Unlock()
+	if was != now2 && (active || seen) {
 		s.hist.addEvent(&server.Event{Source: p.id, Time: now, Message: msg, Severity: sev})
 	}
-	return err
+	return nil
 }
 
 // Close stops the server.

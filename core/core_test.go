@@ -8,6 +8,8 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"github.com/ka1hung/opcua/client"
 )
 
 // startTestServer starts a simulated server on a free local port.
@@ -173,4 +175,71 @@ func TestTrustRejectedCertificate(t *testing.T) {
 		t.Fatalf("after trusting: %v", err)
 	}
 	c.Close()
+}
+
+func TestAlarmsServerToClient(t *testing.T) {
+	s, ep := startTestServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	s.SetSimulating(false) // only the alarm this test raises
+
+	c, err := Dial(ctx, ClientConfig{Endpoint: ep, User: AdminUser, Password: AdminUser})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	if err := s.SetAlarm("P0003_Temp", true, 800, "check pump"); err != nil {
+		t.Fatal(err)
+	}
+	evs := make(chan Event, 100)
+	sub, err := c.SubscribeEvents(ctx, "ns=2;s=Plant", 50*time.Millisecond, func(e client.Event) { evs <- FromClient(e) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub.Close()
+	if err := sub.Refresh(ctx); err != nil {
+		t.Fatal(err)
+	}
+	wait := func(match func(Event) bool) Event {
+		t.Helper()
+		for {
+			select {
+			case e := <-evs:
+				if match(e) {
+					return e
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("event did not arrive")
+			}
+		}
+	}
+	alarm := wait(func(e Event) bool { return e.ConditionName == ManualAlarm })
+	if alarm.Type != "Alarm" || !alarm.Active || alarm.Acked || alarm.Severity != 800 || alarm.Message != "check pump" {
+		t.Fatalf("alarm: %+v", alarm)
+	}
+	ce, err := alarm.ToClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Acknowledge(ctx, ce, "on it"); err != nil {
+		t.Fatal(err)
+	}
+	wait(func(e Event) bool { return e.ConditionName == ManualAlarm && e.Acked })
+	for _, a := range s.Alarms() {
+		if a.Name == ManualAlarm && !a.Acked {
+			t.Errorf("server did not record the acknowledgement: %+v", a)
+		}
+	}
+
+	// A plain event sent by the server arrives too, and the method runs.
+	if err := s.FireEvent("shift change", 0); err != nil {
+		t.Fatal(err)
+	}
+	wait(func(e Event) bool { return e.Message == "shift change" && e.Type == "Event" })
+	out, err := c.Call(ctx, "ns=2;s=Plant", "ns=2;s=Plant.Reset", "test")
+	if err != nil || len(out) != 1 || out[0] != true {
+		t.Errorf("call: %v, %v", out, err)
+	}
+	wait(func(e Event) bool { return e.Message == "reset by admin: test" })
 }
