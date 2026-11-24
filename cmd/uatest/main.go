@@ -34,7 +34,7 @@ import (
 	"github.com/ka1hung/uatester/core"
 )
 
-const usage = `uatest ` + core.Version + ` - OPC UA test tool
+var usage = `uatest ` + core.Version + ` - OPC UA test tool
 
 usage:
   uatest server    run a simulated server
@@ -49,6 +49,7 @@ usage:
   uatest events    print events and alarms; -ack acknowledges alarms
   uatest history   read history: raw, an aggregate, or events
   uatest stress    load test: many clients subscribing
+  uatest version   print the version
 
 uatest <command> -h shows the command's flags.
 `
@@ -62,6 +63,10 @@ func main() {
 	if len(os.Args) < 2 || os.Args[1] == "-h" || os.Args[1] == "help" {
 		fmt.Fprint(os.Stderr, usage)
 		os.Exit(2)
+	}
+	if os.Args[1] == "version" || os.Args[1] == "-version" {
+		fmt.Println("uatest", core.Version)
+		return
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()

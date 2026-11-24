@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    name: Test and command line builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: go.mod tidy
+        run: go mod tidy -diff
+      - name: Vet
+        run: go vet ./core ./cmd/...
+      - name: Test (-race)
+        run: go test -count=1 -race ./core
+      - name: Cross build uatest
+        run: |
+          for t in windows/amd64 linux/amd64 linux/arm64 linux/arm darwin/amd64 darwin/arm64; do
+            echo "== $t"
+            CGO_ENABLED=0 GOOS=${t%/*} GOARCH=${t#*/} GOARM=7 go build -o /dev/null ./cmd/uatest
+          done
+
+  desktop:
+    name: Desktop build (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Vet
+        run: go vet ./app
+      - name: Build
+        run: go build -tags production -ldflags "-H windowsgui" -o uatester.exe ./app

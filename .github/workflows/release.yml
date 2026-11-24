@@ -1,0 +1,189 @@
+# Builds uatester for Windows, macOS and Linux. A pushed tag such as v0.1.0
+# publishes the files as a GitHub release; running the workflow by hand
+# only builds them, as downloadable artifacts, to check the build.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  cli:
+    name: uatest ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { name: windows-amd64, goos: windows, goarch: amd64, goarm: "", ext: .exe }
+          - { name: linux-amd64, goos: linux, goarch: amd64, goarm: "", ext: "" }
+          - { name: linux-arm64, goos: linux, goarch: arm64, goarm: "", ext: "" }
+          - { name: linux-armv7, goos: linux, goarch: arm, goarm: "7", ext: "" }
+          - { name: macos-amd64, goos: darwin, goarch: amd64, goarm: "", ext: "" }
+          - { name: macos-arm64, goos: darwin, goarch: arm64, goarm: "", ext: "" }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then v="${GITHUB_REF_NAME#v}"; else v="dev-${GITHUB_SHA::7}"; fi
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+        run: |
+          mkdir -p out dist
+          go build -trimpath -ldflags "-s -w -X github.com/ka1hung/uatester/core.Version=$VERSION" \
+            -o "out/uatest${{ matrix.ext }}" ./cmd/uatest
+          cp README.md README.en.md LICENSE out/
+          name="uatest-$VERSION-${{ matrix.name }}"
+          if [ "${{ matrix.goos }}" = windows ]; then
+            (cd out && zip -q "../dist/$name.zip" *)
+          else
+            tar -czf "dist/$name.tar.gz" -C out .
+          fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cli-${{ matrix.name }}
+          path: dist/*
+
+  desktop-windows:
+    name: uatester windows-amd64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then v="${GITHUB_REF_NAME#v}"; else v="dev-${GITHUB_SHA::7}"; fi
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+      - name: Build
+        run: |
+          mkdir -p out dist
+          go build -tags production -trimpath \
+            -ldflags "-H windowsgui -s -w -X github.com/ka1hung/uatester/core.Version=$VERSION" \
+            -o out/uatester.exe ./app
+          cp README.md README.en.md LICENSE out/
+          7z a -bd "dist/uatester-$VERSION-windows-amd64.zip" ./out/* > /dev/null
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-windows
+          path: dist/*
+
+  desktop-macos:
+    name: uatester macos-universal
+    runs-on: macos-latest
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "12.0"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then v="${GITHUB_REF_NAME#v}"; else v="dev-${GITHUB_SHA::7}"; fi
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+      - name: Build
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          mkdir -p out dist
+          for arch in arm64 amd64; do
+            GOARCH=$arch go build -tags production -trimpath \
+              -ldflags "-s -w -X github.com/ka1hung/uatester/core.Version=$VERSION" \
+              -o "out/uatester-$arch" ./app
+          done
+          app="out/uatester.app"
+          mkdir -p "$app/Contents/MacOS"
+          lipo -create -output "$app/Contents/MacOS/uatester" out/uatester-arm64 out/uatester-amd64
+          short="${VERSION%%-*}"; case "$short" in dev) short=0.0.0;; esac
+          cat > "$app/Contents/Info.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleName</key><string>uatester</string>
+            <key>CFBundleDisplayName</key><string>uatester</string>
+            <key>CFBundleExecutable</key><string>uatester</string>
+            <key>CFBundleIdentifier</key><string>io.github.ka1hung.uatester</string>
+            <key>CFBundleVersion</key><string>$short</string>
+            <key>CFBundleShortVersionString</key><string>$short</string>
+            <key>LSMinimumSystemVersion</key><string>12.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          EOF
+          codesign --force --deep -s - "$app"
+          ditto -c -k --keepParent "$app" "dist/uatester-$VERSION-macos-universal.zip"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-macos
+          path: dist/*
+
+  desktop-linux:
+    name: uatester linux-amd64
+    # The oldest supported runner, so the binary runs on older glibc too.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libgtk-3-dev libwebkit2gtk-4.1-dev
+      - name: Version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then v="${GITHUB_REF_NAME#v}"; else v="dev-${GITHUB_SHA::7}"; fi
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+      - name: Build
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          mkdir -p out dist
+          go build -tags "production gtk3" -trimpath \
+            -ldflags "-s -w -X github.com/ka1hung/uatester/core.Version=$VERSION" \
+            -o out/uatester ./app
+          cp README.md README.en.md LICENSE out/
+          tar -czf "dist/uatester-$VERSION-linux-amd64.tar.gz" -C out .
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-linux
+          path: dist/*
+
+  release:
+    name: GitHub release
+    if: github.ref_type == 'tag'
+    needs: [cli, desktop-windows, desktop-macos, desktop-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS.txt
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "uatester $GITHUB_REF_NAME" \
+            --notes-file .github/release-notes.md \
+            --generate-notes

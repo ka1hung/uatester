@@ -11,8 +11,9 @@ import (
 	"github.com/ka1hung/opcua/ua"
 )
 
-// Version is this tool's version.
-const Version = "0.1.0"
+// Version is this tool's version. Release builds set it from the git
+// tag: -ldflags "-X github.com/ka1hung/uatester/core.Version=0.1.0".
+var Version = "dev"
 
 // history keeps the last n values per node and events in memory.
 type history struct {

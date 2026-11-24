@@ -11,6 +11,15 @@ OPC UA 測試工具：一個模擬伺服器加一個用戶端，可以互相測�
 | 桌面版 | `uatester.exe`（Wails v3） | Windows 筆電：一個視窗裡同時操作伺服器與用戶端 |
 | 命令列版 | `uatest` | 沒有螢幕的工控機（Linux armv7）長時間測試、現場用指令快速診斷 |
 
+## 下載
+
+到 [Releases](https://github.com/ka1hung/uatester/releases) 下載編譯好的檔案：
+
+- 桌面版：Windows（`.zip`）、macOS（Intel 與 Apple Silicon 通用的 `.app`）、Linux amd64。
+- 命令列版 `uatest`：Windows、macOS、Linux amd64 / arm64 / armv7，單一執行檔、不需要安裝任何東西。
+
+macOS 版沒有經過 Apple 簽章公證，第一次開啟請對 `uatester.app` 按右鍵 →「打開」。Linux 桌面版需要 `libgtk-3-0` 與 `libwebkit2gtk-4.1-0`。
+
 ## 桌面版
 
 左半邊是**伺服器**，右半邊是**用戶端**，下方是兩邊共用的記錄。
@@ -92,6 +101,17 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bin/uatest-linux ./cmd/uatest
 go build -tags server -o bin/uatester-web.exe ./app
 WAILS_SERVER_PORT=8080 bin/uatester-web.exe      # 然後開 http://localhost:8080
 ```
+
+## 發布新版本
+
+推一個 `v` 開頭的 tag，GitHub Actions 就會編譯所有平台並建立 Release：
+
+```
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+版本號會從 tag 帶入程式（視窗標題、`uatest version`）。在 GitHub 的 Actions 頁面手動執行 **release** workflow，只會編譯、不會發布，可以用來先確認能不能編譯。
 
 ## 測試
 

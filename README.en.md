@@ -11,6 +11,15 @@ Two versions share one core (`core/`):
 | Desktop | `uatester.exe` (Wails v3) | Windows laptop: server and client in one window |
 | Command line | `uatest` | Headless controllers (Linux armv7) for soak tests; quick diagnostics in the field |
 
+## Download
+
+Get the built files from [Releases](https://github.com/ka1hung/uatester/releases):
+
+- Desktop: Windows (`.zip`), macOS (a universal `.app` for Intel and Apple Silicon), Linux amd64.
+- Command line `uatest`: Windows, macOS, Linux amd64 / arm64 / armv7; a single file with nothing to install.
+
+The macOS app is not notarized by Apple; the first time, right-click `uatester.app` and choose Open. The Linux desktop app needs `libgtk-3-0` and `libwebkit2gtk-4.1-0`.
+
 ## Desktop
 
 The **server** is on the left, the **client** on the right, and a log shared by both at the bottom.
@@ -92,6 +101,17 @@ While developing, the desktop interface can run in a browser (fully working, jus
 go build -tags server -o bin/uatester-web.exe ./app
 WAILS_SERVER_PORT=8080 bin/uatester-web.exe      # then open http://localhost:8080
 ```
+
+## Publishing a release
+
+Push a tag starting with `v`; GitHub Actions builds every platform and creates the release:
+
+```
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The tag becomes the program's version (window title, `uatest version`). Running the **release** workflow by hand on GitHub's Actions page only builds, without publishing, to check the build first.
 
 ## Testing
 
