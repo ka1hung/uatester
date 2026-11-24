@@ -111,13 +111,7 @@ go test ./...
 
 ## 相依
 
-使用 `github.com/ka1hung/opcua`（私有 repo）。編譯前要先設定：
-
-```
-go env -w GOPRIVATE=github.com/ka1hung/*
-```
-
-並讓 git 能存取 GitHub 私有 repo（`gh auth setup-git` 或 SSH key）。開發 opcua 時若要直接用旁邊的 checkout，可暫時加上 `replace github.com/ka1hung/opcua => ../opcua`，提交前記得拿掉。
+使用 [`github.com/ka1hung/opcua`](https://github.com/ka1hung/opcua)。開發 opcua 時若要直接用旁邊的 checkout，可暫時加上 `replace github.com/ka1hung/opcua => ../opcua`，提交前記得拿掉。
 
 ## 授權
 

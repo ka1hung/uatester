@@ -111,13 +111,7 @@ The `core` tests start the simulated server and connect a real client: read/writ
 
 ## Dependencies
 
-Uses `github.com/ka1hung/opcua` (a private repository). Before building:
-
-```
-go env -w GOPRIVATE=github.com/ka1hung/*
-```
-
-and let git reach private GitHub repositories (`gh auth setup-git` or an SSH key). To work against the opcua checkout next to this one, add `replace github.com/ka1hung/opcua => ../opcua` for a while, and remove it before committing.
+Uses [`github.com/ka1hung/opcua`](https://github.com/ka1hung/opcua). To work against the opcua checkout next to this one, add `replace github.com/ka1hung/opcua => ../opcua` for a while, and remove it before committing.
 
 ## License
 
