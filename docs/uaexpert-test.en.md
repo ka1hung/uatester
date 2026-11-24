@@ -1,10 +1,13 @@
 [繁體中文](uaexpert-test.md) | **English**
 
-# Verifying the opcua server with UaExpert
+# Cross-checking the opcua package against UaExpert
 
-Goal: connect the third-party client **UaExpert** (Unified Automation) to **uatester's server** (built on github.com/ka1hung/opcua) and confirm our OPC UA server works with industry tools. The client side was verified separately with uatest; this document tests the server only.
+Goal: on one **uatester server** (built on github.com/ka1hung/opcua), do the same operations with two clients and compare:
 
-It is written for Claude operating UaExpert through Computer use in the Claude desktop app, and for the person watching. Each step says what to do and what should happen; report results in the format of the last section.
+- **UaExpert** (Unified Automation, third party, widely used): the reference. If it works and the results are right, our **server** is fine.
+- **uatester's client** (right half, also the opcua package): must match UaExpert. A difference means our **client** is wrong.
+
+Written for Claude operating through Computer use in the Claude desktop app, and for the person watching. Each step says what to do on each side and what should happen; report in the format of the last section.
 
 ## Safety rules
 
@@ -17,120 +20,133 @@ It is written for Claude operating UaExpert through Computer use in the Claude d
 | Item | Details |
 |---|---|
 | UaExpert | Installed on this Windows machine (the free edition is enough) |
-| uatester desktop | `C:\Users\kaihung\Desktop\ccc\uatester\bin\uatester.exe` |
+| uatester desktop | `C:\Users\kaihung\Desktop\ccc\uatester\bin\uatester.exe`: server on the left, client on the right, shared log at the bottom |
 | Accounts | `admin` / `admin`: read, write, acknowledge alarms, call methods; `viewer` / `viewer`: read only; anonymous: read only |
 | Test nodes | `ns=2;s=P0000_Temp` … `P0099_Temp` (Double, changing every 0.5 s), `ns=2;s=Setpoint` (Int16), `ns=2;s=Running` (Boolean), method `ns=2;s=Plant.Reset` (input Reason string, output Done Boolean) |
-| Alarms | Every tenth point (P0000, P0010, P0020…) raises a `High` alarm above 80 on its own; alarms can also be raised by hand in uatester |
+| Alarms | Every tenth point (P0000, P0010, P0020…) raises a `High` alarm above 80; alarms can also be raised by hand on uatester's left half |
+
+uatester's interface is in Chinese by default; the "English" button at the top right switches it. The labels below give the Chinese text with the English in brackets.
 
 ## Test 1: local server (Windows, 64-bit)
 
-### 1-0. Start the server (uatester)
+### 1-0. Start the server
 
 1. Open `uatester.exe`.
-2. Left half, "伺服器" (Server): set **監聽位址** (listen address) to `0.0.0.0:4841` and **對外主機名稱 / IP** (host) to `127.0.0.1`; leave the rest.
-3. Press "啟動伺服器" (Start server).
-4. Expect: the state turns "執行中" (Running) and the log at the bottom shows 7 lines `endpoint url=opc.tcp://127.0.0.1:4841 ...`.
+2. Left half (Server): set **監聽位址** (Listen address) to `0.0.0.0:4841` and **對外主機名稱 / IP** (Host name / IP for clients) to `127.0.0.1`.
+3. Press **啟動伺服器** (Start server).
+4. Expect: state Running; the log shows 7 lines `endpoint url=opc.tcp://127.0.0.1:4841 ...`.
 
-### 1-1. Add the server and connect anonymously
+### 1-1. Endpoints and anonymous connection
 
-1. UaExpert **Project** pane → right-click **Servers** → **Add...**.
-2. Under **Custom Discovery**, double-click **< Double click to Add Server... >**, enter `opc.tcp://127.0.0.1:4841`, OK.
-3. Expand the new server and pick the **None - None (uatcp-uasc-uabinary)** endpoint.
-4. **Authentication Settings**: **Anonymous**; press **OK**.
-5. Right-click the server in the Project pane → **Connect**. If a certificate dialog appears, choose **Trust Server Certificate**, then **Continue**.
-6. Expect: `Root` appears in the **Address Space** pane; no red errors in the **Log** window.
+| | Do | Expect |
+|---|---|---|
+| **UaExpert** | Project pane → right-click Servers → **Add...** → under Custom Discovery double-click **< Double click to Add Server... >**, enter `opc.tcp://127.0.0.1:4841` → expand and look at the endpoints → pick **None - None**, Authentication **Anonymous** → OK → right-click the server → **Connect** (on a certificate dialog: **Trust Server Certificate** → Continue) | 7 endpoints: None, and Basic256Sha256, Aes128_Sha256_RsaOaep, Aes256_Sha256_RsaPss each with Sign and Sign & Encrypt; after connecting, `Root` in the Address Space, no red lines in the Log |
+| **uatester client** | Right half: Endpoint URL `opc.tcp://127.0.0.1:4841` → **查詢端點** (Endpoints) → **連線** (Connect) with security None and an empty user (anonymous) | The same 7 endpoints; after connecting, state Connected and a line showing server uatester, state Running |
 
-### 1-2. Browse
+### 1-2. Browse and node attributes
 
-1. Address Space: expand **Objects → Plant**.
-2. Expect: `P0000_Temp` … `P0099_Temp`, `Setpoint`, `Running`, `Reset`.
-3. Select `P0000_Temp`; the **Attributes** pane shows DataType = Double, Description = simulated temperature.
+| | Do | Expect |
+|---|---|---|
+| **UaExpert** | Address Space: **Objects → Plant**; select `P0000_Temp` and read the Attributes pane | Children P0000_Temp…P0099_Temp, Setpoint, Running, Reset; `P0000_Temp` DataType Double, Description simulated temperature |
+| **uatester client** | Tab **瀏覽** (Browse): expand **Objects → Plant**, select `P0000_Temp` | Same children; on the right description simulated temperature, data type Double, access read and history (anonymous cannot write) |
 
 ### 1-3. Read and live updates
 
-1. Drag `P0000_Temp`, `P0010_Temp`, `Setpoint`, `Running` into the **Data Access View** in the middle.
-2. Expect: both temperatures change about every 0.5 s with Status Good; `Setpoint` = 22, `Running` = true.
+| | Do | Expect |
+|---|---|---|
+| **UaExpert** | Drag `P0000_Temp`, `P0010_Temp`, `Setpoint`, `Running` into the **Data Access View** | Temperatures change about every 0.5 s, Status Good; Setpoint = 22, Running = true |
+| **uatester client** | Tab **監看** (Watch): add `ns=2;s=P0000_Temp`, `ns=2;s=P0010_Temp`, `ns=2;s=Setpoint`, `ns=2;s=Running` one by one | Values match UaExpert's at the same moment and change together; Status Good |
 
 ### 1-4. Anonymous cannot write
 
-1. In the Data Access View, double-click the **Value** of `Setpoint`, type `30`, Enter.
-2. Expect: the write fails, the Log shows `BadUserAccessDenied`, the value stays 22.
+| | Do | Expect |
+|---|---|---|
+| **UaExpert** | Data Access View: double-click `Setpoint`'s Value, type `30`, Enter | Fails, Log shows `BadUserAccessDenied`, value stays 22 |
+| **uatester client** | Tab Browse: select `Setpoint`, type `30` in the write box, press **寫入** (Write) | Fails, red error containing `BadUserAccessDenied`, value stays 22 |
 
 ### 1-5. Write as admin
 
-1. Right-click the server → **Disconnect**.
-2. Right-click → **Properties...**, Authentication Settings: **Username**, `admin` / `admin`, OK.
-3. Right-click → **Connect**.
-4. Drag `Setpoint` and `Running` into the Data Access View again if they are gone.
-5. Set `Setpoint` to `30` and `Running` to `false`.
-6. Expect: both writes succeed; uatester's log shows `client write user=admin node=ns=2;s=Setpoint value=30`.
-7. Set `Setpoint` to `40000`. Expect: failure (out of Int16 range, `BadOutOfRange` or `BadTypeMismatch`).
+Disconnect both and log in with an account:
 
-### 1-6. Call a method
+| | Do | Expect |
+|---|---|---|
+| **UaExpert** | Right-click the server → **Disconnect** → **Properties...**, Authentication **Username** `admin` / `admin` → OK → **Connect**; set `Setpoint` to `30` and `Running` to `false` | Both writes succeed; uatester's log shows `client write user=admin node=ns=2;s=Setpoint value=30` |
+| **uatester client** | **中斷** (Disconnect); user `admin`, password `admin`, **連線** (Connect); Browse: write `31` to `Setpoint` and `true` to `Running` | Both succeed ("Written"); UaExpert's Data Access View shows 31 and true **at the same time** |
+| **Both** | Write `40000` to `Setpoint` | Both fail (out of Int16 range: `BadOutOfRange` or `BadTypeMismatch`) with the same status |
 
-1. Address Space: Objects → Plant → right-click **Reset** → **Call...**.
-2. Reason: `uaexpert test`; press **Call**.
-3. Expect: result Good, output Done = true; uatester's log shows `method Reset user=admin reason=uaexpert test`.
+### 1-6. Method call
+
+| | Do | Expect |
+|---|---|---|
+| **UaExpert** | Objects → Plant → right-click **Reset** → **Call...**, Reason `from uaexpert`, **Call** | Result Good, Done = true; uatester's log shows `method Reset user=admin reason=from uaexpert` |
+| **uatester client** | Browse: select **Reset**, Reason `from uatester`, press **呼叫** (Call) | "Call succeeded", Done = true; log shows `reason=from uatester` |
 
 ### 1-7. Events
 
-1. Menu **Document → Add...**, type **Event View**, OK.
-2. Drag **Objects → Server** from the Address Space into the Event View's **Configuration** area.
-3. Call Reset again (1-6).
-4. Expect: an event `reset by admin: ...`; alarm events `P00x0_Temp high (> 80)` / `back to normal` appear over time (some points take tens of seconds to pass 80).
+Open both receivers first, then fire the event:
+
+| | Do | Expect |
+|---|---|---|
+| **UaExpert** | **Document → Add...** → **Event View**; drag **Objects → Server** into the Configuration area | — |
+| **uatester client** | Tab **警報與事件** (Alarms & events): keep notifier `i=2253`, press **訂閱** (Subscribe) | — |
+| **Fire** | uatester left half, tab Alarms & events: event message `compare event`, press **送出事件** (Send event) | **Both** receive `compare event` with the same time, source (Plant) and severity (300); `P00x0_Temp high (> 80)` alarm events arrive over time too |
 
 ### 1-8. Alarms & Conditions
 
-1. **Document → Add...**, type **Alarms & Conditions**, OK.
-2. Drag **Objects → Server** into it (or press its Refresh icon).
-3. Expect: active `High` alarms (Severity 700), including those already active before connecting (ConditionRefresh).
-4. In uatester: left half, tab "警報與事件" (Alarms & events): point `P0005_Temp`, severity `900`, message `uaexpert manual`, press "觸發警報" (Raise alarm).
-5. Expect: the alarm appears in UaExpert's Alarms view **at once** (Severity 900).
-6. In UaExpert, right-click the alarm → **Acknowledge**, comment `ok`, confirm.
-7. Expect: its AckedState becomes Acknowledged; in uatester the row shows "已確認" (acknowledged) and the log shows `client acknowledge user=admin`.
+| | Do | Expect |
+|---|---|---|
+| **UaExpert** | **Document → Add...** → **Alarms & Conditions**; drag **Objects → Server** in | Active `High` alarms (Severity 700), including those active before connecting |
+| **uatester client** | Already subscribed in 1-7; press **重新取得目前警報** (Get current alarms again) | Current alarms match UaExpert's (same points, states, severities) |
+| **Fire** | uatester left half: point `P0005_Temp`, severity `900`, message `compare alarm`, **觸發警報** (Raise alarm) | The alarm appears **at once on both sides**, Severity 900 |
+| **Ack in UaExpert** | Right-click `compare alarm` → **Acknowledge**, comment `ok` | UaExpert shows Acknowledged; **uatester's client** turns it to acknowledged at the same time; the server side shows acknowledged too |
+| **Ack in uatester** | Raise another: point `P0006_Temp`, message `compare alarm 2`; acknowledge it in **uatester's client** with the row's **確認** (Acknowledge) button | uatester shows acknowledged; **UaExpert** turns it Acknowledged at the same time |
 
 ### 1-9. History
 
-1. Let the server run for at least 2 minutes.
-2. **Document → Add...**, type **History Trend View**, OK.
-3. Drag `P0001_Temp` in, set the range to the last 5 minutes, press **Update**.
-4. Expect: a curve going up and down.
+Let the server run for at least 2 minutes:
+
+| | Do | Expect |
+|---|---|---|
+| **UaExpert** | **Document → Add...** → **History Trend View**; drag `P0001_Temp` in, last 5 minutes, **Update** | A curve going up and down |
+| **uatester client** | Tab **歷史** (History): node `ns=2;s=P0001_Temp`, read **原始值** (Raw values), last `5` minutes, **查詢** (Read) | Same curve shape as UaExpert; row count and time range agree |
+| **uatester aggregate** | Read **平均** (Average), interval `60` s | One average per minute (the free UaExpert may not do aggregates; check uatester only) |
 
 ### 1-10. Secured connection and certificate trust
 
-1. Project pane → right-click Servers → Add..., `opc.tcp://127.0.0.1:4841` again, this time the **Basic256Sha256 - Sign & Encrypt** endpoint, Username `admin` / `admin`.
-2. Connect. When UaExpert shows the server certificate, choose **Trust Server Certificate** → Continue.
-3. Expect: the first attempt is **refused** (the Log shows something like `BadSecurityChecksFailed` or `BadCertificateUntrusted`): the server does not trust UaExpert's certificate yet. This is correct.
-4. In uatester: left half, tab "憑證" (Certificates): UaExpert's certificate is listed; press "信任" (Trust).
-5. Connect again in UaExpert. Expect: connected; reading and writing work.
-6. Repeat with **Aes256_Sha256_RsaPss - Sign & Encrypt**.
+| | Do | Expect |
+|---|---|---|
+| **UaExpert** | Add `opc.tcp://127.0.0.1:4841`, endpoint **Basic256Sha256 - Sign & Encrypt**, Username `admin` / `admin`, Connect (trust the server certificate) | First attempt **refused** (`BadSecurityChecksFailed`, `BadCertificateUntrusted` or similar): the server does not trust UaExpert yet. Correct |
+| **uatester client** | Disconnect, security `Basic256Sha256:SignAndEncrypt`, user admin, Connect | First attempt **refused** as well |
+| **Trust** | uatester left half, tab **憑證** (Certificates): **重新整理** (Refresh), then **信任** (Trust) both certificates (UaExpert's and uatester's) | — |
+| **Again** | Connect again on both sides and read `Setpoint` | Both connect and read the same value |
+| **Other policy** | Both use **Aes256_Sha256_RsaPss - Sign & Encrypt** | Both succeed |
 
 ## Test 2: armv7 server (192.168.3.127, 32-bit)
 
-This part verifies the fix for 32-bit platforms (the field controllers). **The person starts the server on .127** (Computer use does not operate SSH):
+Verifies the fix for 32-bit platforms (the field controllers). **The person starts the server on .127** (Computer use does not operate SSH):
 
 ```
 chmod +x uatest-linux-armv7
 ./uatest-linux-armv7 server -addr 0.0.0.0:4841 -host 192.168.3.127 -points 100
 ```
 
-Once it runs:
+Once it runs, use `opc.tcp://192.168.3.127:4841` on both sides (the IP: the network has no DNS) and repeat **1-1 to 1-7 and 1-10**. Differences:
 
-1. In UaExpert add `opc.tcp://192.168.3.127:4841` (use the IP, not a computer name: the network has no DNS).
-2. Repeat **1-1 to 1-8** and **1-10** of Test 1 (in 1-10, "Trust" means the person moves the file from `pki/rejected/certs/` to `pki/trusted/certs/` on .127).
-3. Watch 1-1 in particular: the old library dropped the connection on 32-bit (`BadTCPInternalError`); it should now connect.
+- There is no uatester window on .127: in 1-7, instead of Send event, call Reset once from each side (the method fires an event); in 1-8, compare only the automatic `High` alarms and acknowledgement.
+- Trust in 1-10: the person moves the files from `pki/rejected/certs/` to `pki/trusted/certs/` on .127.
+- Watch 1-1: the old library dropped the connection on 32-bit (`BadTCPInternalError`); it should now connect.
 
 ## Reporting
 
-One row per step; paste the table back into the development conversation when done:
+One row per step; paste the table into the development conversation when done:
 
-| Step | Result | Notes (required on failure) |
-|---|---|---|
-| 1-1 | pass / fail | Full error lines from the Log window, a screenshot of the moment |
-| 1-2 | | |
-| … | | |
+| Step | UaExpert | uatester client | Same? | Notes (required on failure or difference) |
+|---|---|---|---|---|
+| 1-1 | pass / fail | pass / fail | yes / no | |
+| 1-2 | | | | |
+| … | | | | |
 
-On a failure also record:
-- The red lines in UaExpert's **Log** window around that step (copy whole lines).
-- uatester's log lines from the same time.
-- A screenshot at the moment it failed.
+On a failure or difference also record:
+- The red lines in UaExpert's **Log** window around that step (whole lines).
+- uatester's log lines from the same time and any error shown on screen.
+- Screenshots of both sides at that moment.
