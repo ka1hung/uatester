@@ -2,7 +2,7 @@ module github.com/ka1hung/uatester
 
 go 1.26.0
 
-require github.com/ka1hung/opcua v0.1.0
+require github.com/ka1hung/opcua v0.2.1
 
 require (
 	github.com/coder/websocket v1.8.14 // indirect
