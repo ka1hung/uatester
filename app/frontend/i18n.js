@@ -5,6 +5,11 @@
 const text = {
   zh: {
     "lang.switch": "English",
+    "theme.light": "淺色",
+    "theme.dark": "深色",
+    "view.both": "並排",
+    "view.server": "只看伺服器",
+    "view.client": "只看用戶端",
     "app.data": "憑證資料夾",
 
     "server.title": "伺服器",
@@ -193,6 +198,11 @@ const text = {
   },
   en: {
     "lang.switch": "繁體中文",
+    "theme.light": "Light",
+    "theme.dark": "Dark",
+    "view.both": "Side by side",
+    "view.server": "Server only",
+    "view.client": "Client only",
     "app.data": "Certificate folder",
 
     "server.title": "Server",

@@ -16,20 +16,20 @@
   --grid: #e6e5e1;
   font: 13px/1.45 "Segoe UI", "Microsoft JhengHei UI", "Noto Sans TC", system-ui, sans-serif;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --surface-0: #121211;
-    --surface-1: #1a1a19;
-    --surface-2: #262624;
-    --line: #34332f;
-    --text-primary: #f0efec;
-    --text-secondary: #c3c2b7;
-    --text-muted: #918f86;
-    --accent: #3987e5;
-    --series-1: #3987e5;
-    --grid: #2c2c2a;
-  }
+/* Dark theme: slate greys rather than near-black, so panels stay distinct. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #22262c;
+  --surface-1: #2b3037;
+  --surface-2: #363c44;
+  --line: #434a53;
+  --text-primary: #e8eaed;
+  --text-secondary: #bcc1c8;
+  --text-muted: #8f96a0;
+  --accent: #4a90e2;
+  --series-1: #5a9bea;
+  --good: #3cb043;
+  --grid: #3a4048;
 }
 
 * { box-sizing: border-box; }
@@ -58,6 +58,7 @@ main {
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px;
   padding: 12px; min-height: 0;
 }
+main.single { grid-template-columns: minmax(0, 1fr); }
 .panel, #log {
   display: flex; flex-direction: column; gap: 10px; min-height: 0; min-width: 0;
   background: var(--surface-1); border: 1px solid var(--line); border-radius: 8px; padding: 12px;

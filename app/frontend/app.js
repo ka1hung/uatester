@@ -82,6 +82,39 @@ $$(".tabs").forEach(nav => nav.addEventListener("click", e => {
 }));
 const activeTab = group => $(`.tabs[data-group="${group}"] button.active`)?.dataset.tab;
 
+// The view switch shows the server, the client, or both side by side.
+function setView(view) {
+  if (!["both", "server", "client"].includes(view)) view = "both";
+  $$("#view button").forEach(b => b.classList.toggle("active", b.dataset.view === view));
+  $("#server").hidden = view === "client";
+  $("#client").hidden = view === "server";
+  $("main").classList.toggle("single", view !== "both");
+  localStorage.setItem("view", view);
+}
+$("#view").addEventListener("click", e => {
+  const b = e.target.closest("button[data-view]");
+  if (b) setView(b.dataset.view);
+});
+setView(localStorage.getItem("view"));
+
+// The theme is light or dark; it starts from the system setting until the
+// user picks one.
+function setTheme(theme) {
+  if (theme !== "light" && theme !== "dark") {
+    theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  document.documentElement.dataset.theme = theme;
+  const btn = $("#theme");
+  btn.dataset.i18n = theme === "dark" ? "theme.light" : "theme.dark";
+  btn.textContent = t(btn.dataset.i18n);
+}
+$("#theme").addEventListener("click", () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  localStorage.setItem("theme", next);
+  setTheme(next);
+});
+setTheme(localStorage.getItem("theme"));
+
 $("#lang").addEventListener("click", () => {
   setLang(getLang() === "zh" ? "en" : "zh");
   relabel();

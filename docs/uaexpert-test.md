@@ -20,7 +20,7 @@
 | 項目 | 內容 |
 |---|---|
 | UaExpert | 已安裝在這台 Windows（免費版即可） |
-| uatester 桌面版 | `C:\Users\kaihung\Desktop\ccc\uatester\bin\uatester.exe`：左半邊是伺服器、右半邊是用戶端，下方是兩邊共用的記錄 |
+| uatester 桌面版 | `C:\Users\kaihung\Desktop\ccc\uatester\bin\uatester.exe`：左半邊是伺服器、右半邊是用戶端，下方是兩邊共用的記錄；畫面太擠時，上方的「只看伺服器」「只看用戶端」可只留一邊，「並排」再放回來 |
 | 帳號 | `admin` / `admin`：可讀寫、可確認警報、可呼叫方法；`viewer` / `viewer`：唯讀；匿名：唯讀 |
 | 測試節點 | `ns=2;s=P0000_Temp` … `P0099_Temp`（Double，每 0.5 秒變化）、`ns=2;s=Setpoint`（Int16）、`ns=2;s=Running`（Boolean）、方法 `ns=2;s=Plant.Reset`（輸入 Reason 字串，輸出 Done 布林） |
 | 警報 | 每第 10 個點位（P0000、P0010、P0020…）超過 80 自動觸發 `High` 警報；也可在 uatester 左半邊手動觸發 |

@@ -20,7 +20,7 @@ Written for Claude operating through Computer use in the Claude desktop app, and
 | Item | Details |
 |---|---|
 | UaExpert | Installed on this Windows machine (the free edition is enough) |
-| uatester desktop | `C:\Users\kaihung\Desktop\ccc\uatester\bin\uatester.exe`: server on the left, client on the right, shared log at the bottom |
+| uatester desktop | `C:\Users\kaihung\Desktop\ccc\uatester\bin\uatester.exe`: server on the left, client on the right, shared log at the bottom; when it gets crowded, **只看伺服器** (Server only) or **只看用戶端** (Client only) at the top keeps one side, **並排** (Side by side) brings both back |
 | Accounts | `admin` / `admin`: read, write, acknowledge alarms, call methods; `viewer` / `viewer`: read only; anonymous: read only |
 | Test nodes | `ns=2;s=P0000_Temp` … `P0099_Temp` (Double, changing every 0.5 s), `ns=2;s=Setpoint` (Int16), `ns=2;s=Running` (Boolean), method `ns=2;s=Plant.Reset` (input Reason string, output Done Boolean) |
 | Alarms | Every tenth point (P0000, P0010, P0020…) raises a `High` alarm above 80; alarms can also be raised by hand on uatester's left half |
